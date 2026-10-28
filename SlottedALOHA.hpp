@@ -5,6 +5,7 @@
 #include <queue>
 #include <iostream>
 #include <cstdlib>
+#include <algorithm>
 
 class Node {
 public:
@@ -23,7 +24,8 @@ public:
         if (!hasPendingFrame()) return false;
         if (backoff_slots > 0) {
             backoff_slots--;
-            std::cout << "[ALOHA MAC] Node " << (int)node_id << " backing off. Remaining delay: " << backoff_slots << " slots.\n";
+            std::cout << "[FEATURE 5: MULTIPLE ACCESS] Node " << (int)node_id 
+                      << " in backoff state. " << backoff_slots << " slot(s) remaining.\n";
             return false;
         }
         return true;
@@ -31,16 +33,17 @@ public:
 
     void handleCollision() {
         collision_count++;
-        // Binary Exponential Backoff: Choose random delay between [1, 2^k - 1]
+        // Binary Exponential Backoff: Delay between [1, 2^k - 1] slots
         int max_backoff = (1 << std::min(collision_count, 4)) - 1;
-        backoff_slots = (rand() % max_backoff) + 1;
-        std::cout << "[ALOHA MAC] Node " << (int)node_id << " COLLISION! Backing off for " << backoff_slots << " time slots.\n";
+        backoff_slots = (rand() % std::max(max_backoff, 1)) + 1;
+        std::cout << "[FEATURE 5: MULTIPLE ACCESS] Node " << (int)node_id 
+                  << " COLLISION DETECTED! Exponential Backoff set to " << backoff_slots << " slots.\n";
     }
 
     void handleSuccess() {
         collision_count = 0;
         backoff_slots = 0;
-        if (!tx_queue.empty()) tx_queue.pop(); // Remove transmitted frame
+        if (!tx_queue.empty()) tx_queue.pop();
     }
 };
 
