@@ -8,6 +8,7 @@
 #include "HammingCode.hpp"
 #include "Frame.hpp"
 #include "SelectiveRepeat.hpp"
+#include "StochasticChannel.hpp"
 
 #if defined(_WIN32) || defined(_WIN64)
     #include <winsock2.h>
@@ -19,7 +20,9 @@
     #include <unistd.h>
     #include <fcntl.h>
 #endif
+
 using namespace std;
+
 Frame parseSerializedFrame(const string& raw) {
     Frame f;
     f.node_id = 1;
@@ -78,7 +81,6 @@ int main() {
 
     bind(server_sock, (struct sockaddr*)&server_addr, sizeof(server_addr));
 
-    // Set non-blocking mode on socket
 #if defined(_WIN32) || defined(_WIN64)
     u_long mode = 1;
     ioctlsocket(server_sock, FIONBIO, &mode);
@@ -86,7 +88,6 @@ int main() {
     fcntl(server_sock, F_SETFL, O_NONBLOCK);
 #endif
 
-    // PyShark Mirror Socket (Port 9000)
     int pyshark_sock = socket(AF_INET, SOCK_DGRAM, 0);
     struct sockaddr_in pyshark_addr;
     memset(&pyshark_addr, 0, sizeof(pyshark_addr));
@@ -95,12 +96,12 @@ int main() {
     pyshark_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
     SelectiveRepeatReceiver receiver(4, 8);
+    StochasticChannel channel(0.25, 0.15); 
     int current_slot = 1;
-    bool force_noise_once = true;
 
     cout << "[SERVER] Listening for Client connections on UDP Port 8000...\n";
 
-    while (current_slot <= 15) {
+    while (current_slot <= 20) {
         cout << "=== TIME SLOT " << current_slot << " ===\n";
         vector<pair<Frame, sockaddr_in>> slot_frames;
         auto slot_start = chrono::steady_clock::now();
@@ -118,27 +119,28 @@ int main() {
             this_thread::sleep_for(chrono::milliseconds(10));
         }
 
-       
         // FEATURE 5: MULTIPLE ACCESS (SLOTTED ALOHA EVALUATION)
         if (slot_frames.size() > 1) {
             cout << "[FEATURE 5: MULTIPLE ACCESS] COLLISION DETECTED in Slot " << current_slot 
-                      << "! Received " << slot_frames.size() << " client frames simultaneously.\n";
+                 << "! Received " << slot_frames.size() << " client frames simultaneously.\n";
             cout << "[FEATURE 5: MULTIPLE ACCESS] Discarding garbled frames. Clients will time out and back off.\n";
         }
         else if (slot_frames.size() == 1) {
             Frame rx_frame = slot_frames[0].first;
             sockaddr_in sender_client = slot_frames[0].second;
 
-            cout << "[FEATURE 1: MOVEMENT OF PACKETS] Server received Frame from Client Node " 
-                      << (int)rx_frame.node_id << " | Seq=" << (int)rx_frame.seq_num << "\n";
+            if (channel.shouldDropPacket()) {
+                cout << "[STOCHASTIC CHANNEL] Frame Seq=" << (int)rx_frame.node_id 
+                     << " Seq=" << (int)rx_frame.seq_num << " WAS DROPPED in physical transit!\n";
+                current_slot++;
+                continue;
+            }
 
-            // FEATURE 3: ERROR HANDLING (HAMMING CODE FEC NOISE INJECTION)
-            if (rx_frame.seq_num == 2 && force_noise_once) {
-                cout << "[FEATURE 3: ERROR HANDLING] Injecting 1-bit channel noise into Frame Seq=2...\n";
-                if (!rx_frame.encoded_payload.empty()) {
-                    rx_frame.encoded_payload[0] ^= 0x10; // Flip 1 bit
-                }
-                force_noise_once = false;
+            cout << "[FEATURE 1: MOVEMENT OF PACKETS] Server received Frame from Client Node " 
+                 << (int)rx_frame.node_id << " | Seq=" << (int)rx_frame.seq_num << "\n";
+
+            if (channel.shouldInjectNoise()) {
+                channel.injectRandomBitFlip(rx_frame);
             }
 
             string pyshark_msg = rx_frame.serialize();
@@ -149,11 +151,10 @@ int main() {
 
             // FEATURE 4: FLOW CONTROL (SENDING SELECTIVE ACK BACK TO CLIENT)
             cout << "[FEATURE 4: FLOW CONTROL] Server sending Selective ACK Seq=" 
-                      << (int)ack_frame.seq_num << " back to Client Node " << (int)rx_frame.node_id << "...\n";
+                 << (int)ack_frame.seq_num << " back to Client Node " << (int)rx_frame.node_id << "...\n";
             string ack_serialized = ack_frame.serialize();
             sendto(server_sock, ack_serialized.c_str(), ack_serialized.length(), 0, 
                    (struct sockaddr*)&sender_client, sizeof(sender_client));
-
 
             sendto(pyshark_sock, ack_serialized.c_str(), ack_serialized.length(), 0, 
                    (struct sockaddr*)&pyshark_addr, sizeof(pyshark_addr));
@@ -169,7 +170,7 @@ int main() {
     cout << "  SERVER SIMULATION COMPLETED — IN-ORDER APPLICATION DELIVERY SUMMARY      \n";
     for (size_t i = 0; i < receiver.upper_layer_delivered_data.size(); ++i) {
         cout << "  [FEATURE 2: IN-ORDER DELIVERY] Index " << i << " -> Delivered Payload: \"" 
-                  << receiver.upper_layer_delivered_data[i] << "\"\n";
+             << receiver.upper_layer_delivered_data[i] << "\"\n";
     }
 
 #if defined(_WIN32) || defined(_WIN64)

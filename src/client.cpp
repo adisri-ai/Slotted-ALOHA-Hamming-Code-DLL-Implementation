@@ -19,7 +19,9 @@
     #include <unistd.h>
     #include <fcntl.h>
 #endif
+
 using namespace std;
+
 int main(int argc, char* argv[]) {
     uint8_t node_id = (argc > 1) ? stoi(argv[1]) : 1;
     cout << "  DATA LINK LAYER CLIENT (NODE ID: " << (int)node_id << ")\n";
@@ -35,6 +37,7 @@ int main(int argc, char* argv[]) {
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(8000); 
     server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+
 #if defined(_WIN32) || defined(_WIN64)
     u_long mode = 1;
     ioctlsocket(client_sock, FIONBIO, &mode);
@@ -55,7 +58,6 @@ int main(int argc, char* argv[]) {
             mac_node.tx_queue.push(pair.second.frame);
         }
     } else {
-        // Node 2 sends a single frame to induce a Slotted ALOHA collision in Slot 1
         Frame col_frame;
         col_frame.node_id = node_id;
         col_frame.type = FRAME_DATA;
@@ -65,19 +67,18 @@ int main(int argc, char* argv[]) {
     }
 
     int current_slot = 1;
-    while ((!mac_node.tx_queue.empty() || !sender.window_buffer.empty()) && current_slot <= 12) {
+    while ((!mac_node.tx_queue.empty() || !sender.window_buffer.empty()) && current_slot <= 20) {
         this_thread::sleep_for(chrono::milliseconds(300));
 
         if (mac_node.canTransmitInSlot()) {
             Frame tx_frame = mac_node.tx_queue.front();
             string serialized = tx_frame.serialize();
 
-        
             sendto(client_sock, serialized.c_str(), serialized.length(), 0, 
                    (struct sockaddr*)&server_addr, sizeof(server_addr));
 
             cout << "[FEATURE 1: MOVEMENT OF PACKETS] Client Node " << (int)node_id 
-                      << " -> Server | Transmitted Frame Seq=" << (int)tx_frame.seq_num << "\n";
+                 << " -> Server | Transmitted Frame Seq=" << (int)tx_frame.seq_num << "\n";
             
             mac_node.handleSuccess();
         }
@@ -92,7 +93,7 @@ int main(int argc, char* argv[]) {
             if (seq_pos != string::npos) {
                 int ack_seq = stoi(ack_str.substr(seq_pos + 4));
                 cout << "[FEATURE 4: FLOW CONTROL] Client Node " << (int)node_id 
-                          << " received ACK for Seq=" << ack_seq << "\n";
+                     << " received ACK for Seq=" << ack_seq << "\n";
                 sender.receiveAck(ack_seq);
             }
         }
@@ -101,7 +102,7 @@ int main(int argc, char* argv[]) {
         vector<Frame> retransmissions = sender.tickTimers();
         for (const auto& re_frame : retransmissions) {
             cout << "[FEATURE 4: FLOW CONTROL] Client Node " << (int)node_id 
-                      << " Retransmission Timer expired for Seq=" << (int)re_frame.seq_num << ". Re-queuing...\n";
+                 << " Retransmission Timer expired for Seq=" << (int)re_frame.seq_num << ". Re-queuing...\n";
             mac_node.tx_queue.push(re_frame);
             mac_node.handleCollision();
         }
