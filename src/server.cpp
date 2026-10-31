@@ -19,9 +19,8 @@
     #include <unistd.h>
     #include <fcntl.h>
 #endif
-
-// Parses raw incoming UDP string back into a Frame struct
-Frame parseSerializedFrame(const std::string& raw) {
+using namespace std;
+Frame parseSerializedFrame(const string& raw) {
     Frame f;
     f.node_id = 1;
     f.type = FRAME_DATA;
@@ -30,30 +29,30 @@ Frame parseSerializedFrame(const std::string& raw) {
     f.payload_len = 0;
 
     size_t node_pos = raw.find("NODE:");
-    if (node_pos != std::string::npos) f.node_id = std::stoi(raw.substr(node_pos + 5));
+    if (node_pos != string::npos) f.node_id = stoi(raw.substr(node_pos + 5));
 
     size_t type_pos = raw.find("TYPE:");
-    if (type_pos != std::string::npos) {
-        std::string t = raw.substr(type_pos + 5, 4);
-        if (t.find("ACK") != std::string::npos) f.type = FRAME_ACK;
-        else if (t.find("NAK") != std::string::npos) f.type = FRAME_NAK;
+    if (type_pos != string::npos) {
+        string t = raw.substr(type_pos + 5, 4);
+        if (t.find("ACK") != string::npos) f.type = FRAME_ACK;
+        else if (t.find("NAK") != string::npos) f.type = FRAME_NAK;
         else f.type = FRAME_DATA;
     }
 
     size_t seq_pos = raw.find("SEQ:");
-    if (seq_pos != std::string::npos) f.seq_num = std::stoi(raw.substr(seq_pos + 4));
+    if (seq_pos != string::npos) f.seq_num = stoi(raw.substr(seq_pos + 4));
 
     size_t len_pos = raw.find("LEN:");
-    if (len_pos != std::string::npos) f.payload_len = std::stoi(raw.substr(len_pos + 4));
+    if (len_pos != string::npos) f.payload_len = stoi(raw.substr(len_pos + 4));
 
     size_t payload_pos = raw.find("PAYLOAD_HAMMING:");
-    if (payload_pos != std::string::npos) {
-        std::string hex_str = raw.substr(payload_pos + 16);
+    if (payload_pos != string::npos) {
+        string hex_str = raw.substr(payload_pos + 16);
         size_t space_pos = 0;
-        while ((space_pos = hex_str.find(' ')) != std::string::npos) {
-            std::string token = hex_str.substr(0, space_pos);
+        while ((space_pos = hex_str.find(' ')) != string::npos) {
+            string token = hex_str.substr(0, space_pos);
             if (!token.empty()) {
-                f.encoded_payload.push_back(static_cast<uint8_t>(std::stoi(token, nullptr, 16)));
+                f.encoded_payload.push_back(static_cast<uint8_t>(stoi(token, nullptr, 16)));
             }
             hex_str.erase(0, space_pos + 1);
         }
@@ -62,9 +61,7 @@ Frame parseSerializedFrame(const std::string& raw) {
 }
 
 int main() {
-    std::cout << "===========================================================================\n";
-    std::cout << "  DATA LINK LAYER SERVER (RECEIVER NODE & CHANNEL MASTER ON PORT 8000)      \n";
-    std::cout << "===========================================================================\n\n";
+    cout << "  DATA LINK LAYER SERVER (RECEIVER NODE & CHANNEL MASTER ON PORT 8000)      \n";
 
 #if defined(_WIN32) || defined(_WIN64)
     WSADATA wsaData;
@@ -89,7 +86,7 @@ int main() {
     fcntl(server_sock, F_SETFL, O_NONBLOCK);
 #endif
 
-    // Socket 2: PyShark Mirror Socket (Port 9000)
+    // PyShark Mirror Socket (Port 9000)
     int pyshark_sock = socket(AF_INET, SOCK_DGRAM, 0);
     struct sockaddr_in pyshark_addr;
     memset(&pyshark_addr, 0, sizeof(pyshark_addr));
@@ -101,19 +98,14 @@ int main() {
     int current_slot = 1;
     bool force_noise_once = true;
 
-    std::cout << "[SERVER] Listening for Client connections on UDP Port 8000...\n";
+    cout << "[SERVER] Listening for Client connections on UDP Port 8000...\n";
 
     while (current_slot <= 15) {
-        std::cout << "\n---------------------------------------------------------------------------\n";
-        std::cout << "=== TIME SLOT " << current_slot << " ===\n";
-        std::cout << "---------------------------------------------------------------------------\n";
-
-        std::vector<std::pair<Frame, sockaddr_in>> slot_frames;
-        auto slot_start = std::chrono::steady_clock::now();
-
-        // Collect incoming client datagrams during the 300ms time slot window
-        while (std::chrono::duration_cast<std::chrono::milliseconds>(
-                   std::chrono::steady_clock::now() - slot_start).count() < 300) {
+        cout << "=== TIME SLOT " << current_slot << " ===\n";
+        vector<pair<Frame, sockaddr_in>> slot_frames;
+        auto slot_start = chrono::steady_clock::now();
+        while (chrono::duration_cast<chrono::milliseconds>(
+                   chrono::steady_clock::now() - slot_start).count() < 300) {
             char buffer[1024] = {0};
             socklen_t addr_len = sizeof(client_addr);
             int bytes_read = recvfrom(server_sock, buffer, sizeof(buffer) - 1, 0, 
@@ -123,71 +115,60 @@ int main() {
                 Frame f = parseSerializedFrame(buffer);
                 slot_frames.push_back({f, client_addr});
             }
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            this_thread::sleep_for(chrono::milliseconds(10));
         }
 
-        // ---------------------------------------------------------------------
+       
         // FEATURE 5: MULTIPLE ACCESS (SLOTTED ALOHA EVALUATION)
-        // ---------------------------------------------------------------------
         if (slot_frames.size() > 1) {
-            std::cout << "[FEATURE 5: MULTIPLE ACCESS] COLLISION DETECTED in Slot " << current_slot 
+            cout << "[FEATURE 5: MULTIPLE ACCESS] COLLISION DETECTED in Slot " << current_slot 
                       << "! Received " << slot_frames.size() << " client frames simultaneously.\n";
-            std::cout << "[FEATURE 5: MULTIPLE ACCESS] Discarding garbled frames. Clients will time out and back off.\n";
+            cout << "[FEATURE 5: MULTIPLE ACCESS] Discarding garbled frames. Clients will time out and back off.\n";
         }
         else if (slot_frames.size() == 1) {
             Frame rx_frame = slot_frames[0].first;
             sockaddr_in sender_client = slot_frames[0].second;
 
-            std::cout << "[FEATURE 1: MOVEMENT OF PACKETS] Server received Frame from Client Node " 
+            cout << "[FEATURE 1: MOVEMENT OF PACKETS] Server received Frame from Client Node " 
                       << (int)rx_frame.node_id << " | Seq=" << (int)rx_frame.seq_num << "\n";
 
-            // -----------------------------------------------------------------
             // FEATURE 3: ERROR HANDLING (HAMMING CODE FEC NOISE INJECTION)
-            // -----------------------------------------------------------------
             if (rx_frame.seq_num == 2 && force_noise_once) {
-                std::cout << "[FEATURE 3: ERROR HANDLING] Injecting 1-bit channel noise into Frame Seq=2...\n";
+                cout << "[FEATURE 3: ERROR HANDLING] Injecting 1-bit channel noise into Frame Seq=2...\n";
                 if (!rx_frame.encoded_payload.empty()) {
                     rx_frame.encoded_payload[0] ^= 0x10; // Flip 1 bit
                 }
                 force_noise_once = false;
             }
 
-            // Mirror Frame to PyShark
-            std::string pyshark_msg = rx_frame.serialize();
+            string pyshark_msg = rx_frame.serialize();
             sendto(pyshark_sock, pyshark_msg.c_str(), pyshark_msg.length(), 0, 
                    (struct sockaddr*)&pyshark_addr, sizeof(pyshark_addr));
 
-            // Process Frame at Receiver
             Frame ack_frame = receiver.processFrame(rx_frame);
 
-            // -----------------------------------------------------------------
             // FEATURE 4: FLOW CONTROL (SENDING SELECTIVE ACK BACK TO CLIENT)
-            // -----------------------------------------------------------------
-            std::cout << "[FEATURE 4: FLOW CONTROL] Server sending Selective ACK Seq=" 
+            cout << "[FEATURE 4: FLOW CONTROL] Server sending Selective ACK Seq=" 
                       << (int)ack_frame.seq_num << " back to Client Node " << (int)rx_frame.node_id << "...\n";
-            std::string ack_serialized = ack_frame.serialize();
+            string ack_serialized = ack_frame.serialize();
             sendto(server_sock, ack_serialized.c_str(), ack_serialized.length(), 0, 
                    (struct sockaddr*)&sender_client, sizeof(sender_client));
 
-            // Mirror ACK to PyShark
+
             sendto(pyshark_sock, ack_serialized.c_str(), ack_serialized.length(), 0, 
                    (struct sockaddr*)&pyshark_addr, sizeof(pyshark_addr));
         }
         else {
-            std::cout << "[FEATURE 5: MULTIPLE ACCESS] Slot " << current_slot << " is IDLE.\n";
+            cout << "[FEATURE 5: MULTIPLE ACCESS] Slot " << current_slot << " is IDLE.\n";
         }
 
         current_slot++;
     }
 
-    // -------------------------------------------------------------------------
     // FEATURE 2: IN-ORDER DELIVERY SUMMARY
-    // -------------------------------------------------------------------------
-    std::cout << "\n===========================================================================\n";
-    std::cout << "  SERVER SIMULATION COMPLETED — IN-ORDER APPLICATION DELIVERY SUMMARY      \n";
-    std::cout << "===========================================================================\n";
+    cout << "  SERVER SIMULATION COMPLETED — IN-ORDER APPLICATION DELIVERY SUMMARY      \n";
     for (size_t i = 0; i < receiver.upper_layer_delivered_data.size(); ++i) {
-        std::cout << "  [FEATURE 2: IN-ORDER DELIVERY] Index " << i << " -> Delivered Payload: \"" 
+        cout << "  [FEATURE 2: IN-ORDER DELIVERY] Index " << i << " -> Delivered Payload: \"" 
                   << receiver.upper_layer_delivered_data[i] << "\"\n";
     }
 

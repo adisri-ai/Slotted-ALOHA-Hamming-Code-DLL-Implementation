@@ -7,7 +7,7 @@
 #include <map>
 #include <iostream>
 #include <algorithm>
-
+using namespace std;
 class SelectiveRepeatSender {
 public:
     int window_size;
@@ -18,10 +18,10 @@ public:
     struct PacketState {
         Frame frame;
         bool acked;
-        int timer; // Remaining time slots before timeout
+        int timer;
     };
 
-    std::map<int, PacketState> window_buffer;
+    map<int, PacketState> window_buffer;
 
     SelectiveRepeatSender(int window_sz = 4, int max_seq = 8) 
         : window_size(window_sz), max_seq_num(max_seq), send_base(0), next_seq_num(0) {}
@@ -30,9 +30,9 @@ public:
         return (window_buffer.size() < static_cast<size_t>(window_size));
     }
 
-    void sendPacket(uint8_t node_id, const std::vector<uint8_t>& raw_data) {
+    void sendPacket(uint8_t node_id, const vector<uint8_t>& raw_data) {
         if (!canSend()) {
-            std::cout << "[SR SENDER] Window full! Cannot send packet with Seq=" << next_seq_num << "\n";
+            cout << "[SR SENDER] Window full! Cannot send packet with Seq=" << next_seq_num << "\n";
             return;
         }
 
@@ -45,7 +45,7 @@ public:
         f.payload_len = static_cast<uint8_t>(raw_data.size());
 
         window_buffer[next_seq_num] = {f, false, 3}; // Timeout set to 3 time slots
-        std::cout << "[SR SENDER] Frame created & buffered: Seq=" << (int)f.seq_num << "\n";
+        cout << "[SR SENDER] Frame created & buffered: Seq=" << (int)f.seq_num << "\n";
         
         next_seq_num = (next_seq_num + 1) % max_seq_num;
     }
@@ -53,11 +53,11 @@ public:
     void receiveAck(int ack_seq) {
         if (window_buffer.find(ack_seq) != window_buffer.end()) {
             window_buffer[ack_seq].acked = true;
-            std::cout << "[SR SENDER] Received Selective ACK for Seq=" << ack_seq << "\n";
+            cout << "[SR SENDER] Received Selective ACK for Seq=" << ack_seq << "\n";
 
             // Slide window base if lowest sequence number is acknowledged
             while (!window_buffer.empty() && window_buffer[send_base].acked) {
-                std::cout << "[SR SENDER] Sliding Window Base forward from Seq=" << send_base << "\n";
+                cout << "[SR SENDER] Sliding Window Base forward from Seq=" << send_base << "\n";
                 window_buffer.erase(send_base);
                 send_base = (send_base + 1) % max_seq_num;
             }
@@ -65,13 +65,13 @@ public:
     }
 
     // Ticks down retransmission timers for unACKed frames in current window
-    std::vector<Frame> tickTimers() {
-        std::vector<Frame> retransmit_queue;
+    vector<Frame> tickTimers() {
+        vector<Frame> retransmit_queue;
         for (auto& pair : window_buffer) {
             if (!pair.second.acked) {
                 pair.second.timer--;
                 if (pair.second.timer <= 0) {
-                    std::cout << "[SR TIMEOUT] Retransmission timer expired for Seq=" << pair.first << "! Retransmitting...\n";
+                    cout << "[SR TIMEOUT] Retransmission timer expired for Seq=" << pair.first << "! Retransmitting...\n";
                     pair.second.timer = 3; // Reset timer
                     retransmit_queue.push_back(pair.second.frame);
                 }
@@ -87,8 +87,8 @@ public:
     int max_seq_num;
     int rcv_base;
 
-    std::map<int, Frame> rcv_buffer;
-    std::vector<std::string> upper_layer_delivered_data;
+    map<int, Frame> rcv_buffer;
+    vector<string> upper_layer_delivered_data;
 
     SelectiveRepeatReceiver(int window_sz = 4, int max_seq = 8) 
         : window_size(window_sz), max_seq_num(max_seq), rcv_base(0) {}
@@ -102,12 +102,11 @@ public:
 
     Frame processFrame(Frame frame) {
         int errors_corrected = 0;
-        // Step 1: Pass payload through Hamming Decoder
-        std::vector<uint8_t> clean_payload = HammingCode::decodeBuffer(frame.encoded_payload, errors_corrected);
-        std::string payload_str(clean_payload.begin(), clean_payload.end());
+        vector<uint8_t> clean_payload = HammingCode::decodeBuffer(frame.encoded_payload, errors_corrected);
+        string payload_str(clean_payload.begin(), clean_payload.end());
 
         int seq = frame.seq_num;
-        std::cout << "[SR RECEIVER] Processing Frame Seq=" << seq << " Payload: \"" << payload_str << "\"\n";
+        cout << "[SR RECEIVER] Processing Frame Seq=" << seq << " Payload: \"" << payload_str << "\"\n";
 
         Frame ack_frame;
         ack_frame.node_id = 0; // Receiver ID
@@ -118,27 +117,25 @@ public:
             rcv_buffer[seq] = frame;
 
             if (seq == rcv_base) {
-                // In-Order Arrival: Deliver contiguous buffered packets to Application Layer
-                std::cout << "[SR RECEIVER] In-Order Packet Seq=" << seq << " received. Delivering to Application Layer...\n";
+                cout << "[SR RECEIVER] In-Order Packet Seq=" << seq << " received. Delivering to Application Layer...\n";
                 
                 while (rcv_buffer.find(rcv_base) != rcv_buffer.end()) {
                     int num_corrected = 0;
-                    std::vector<uint8_t> data_bytes = HammingCode::decodeBuffer(rcv_buffer[rcv_base].encoded_payload, num_corrected);
-                    std::string delivered_msg(data_bytes.begin(), data_bytes.end());
+                    vector<uint8_t> data_bytes = HammingCode::decodeBuffer(rcv_buffer[rcv_base].encoded_payload, num_corrected);
+                    string delivered_msg(data_bytes.begin(), data_bytes.end());
                     
                     upper_layer_delivered_data.push_back(delivered_msg);
-                    std::cout << "   ---> Delivered to Upper Layer: \"" << delivered_msg << "\" (Seq=" << rcv_base << ")\n";
+                    cout << "   ---> Delivered to Upper Layer: \"" << delivered_msg << "\" (Seq=" << rcv_base << ")\n";
                     
                     rcv_buffer.erase(rcv_base);
                     rcv_base = (rcv_base + 1) % max_seq_num;
                 }
-                std::cout << "[SR RECEIVER] Receiver Window advanced. New Base Seq=" << rcv_base << "\n";
+                cout << "[SR RECEIVER] Receiver Window advanced. New Base Seq=" << rcv_base << "\n";
             } else {
-                // Out-of-Order Arrival: Buffer frame
-                std::cout << "[SR RECEIVER] Out-of-Order Packet Seq=" << seq << " received (Expected Base=" << rcv_base << "). Buffering frame.\n";
+                cout << "[SR RECEIVER] Out-of-Order Packet Seq=" << seq << " received (Expected Base=" << rcv_base << "). Buffering frame.\n";
             }
         } else {
-            std::cout << "[SR RECEIVER] Duplicate or Out-of-Window Packet Seq=" << seq << " discarded. Resending ACK.\n";
+            cout << "[SR RECEIVER] Duplicate or Out-of-Window Packet Seq=" << seq << " discarded. Resending ACK.\n";
         }
 
         return ack_frame;

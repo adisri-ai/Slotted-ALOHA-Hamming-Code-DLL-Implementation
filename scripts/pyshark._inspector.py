@@ -4,10 +4,7 @@ import os
 import platform
 from colorama import Fore, Style, init
 
-# Initialize colorama for cross-platform terminal colors
 init(autoreset=True)
-
-# Port used by C++ Channel Simulator
 PORT = 9000
 
 def parse_dll_frame(raw_str):
@@ -35,7 +32,6 @@ def inspect_hamming_bits(hex_payload_str):
     bit_summary = []
     for h in bytes_hex:
         val = int(h, 16)
-        # Convert to 8-bit binary representation
         bin_str = f"{val:08b}"
         bit_summary.append(f"0x{h.upper()} ({bin_str})")
     
@@ -47,9 +43,7 @@ def process_pyshark_packet(packet, packet_count, tracker_state):
     Extracts custom frame header fields from UDP payload and displays packet details.
     """
     try:
-        # Extract payload bytes from PyShark packet
         if hasattr(packet, 'udp') and hasattr(packet.udp, 'payload'):
-            # PyShark formats udp.payload as colon-separated hex bytes: "4e:4f:44:45..."
             raw_hex = packet.udp.payload.replace(':', '')
             raw_bytes = bytes.fromhex(raw_hex)
             ascii_payload = raw_bytes.decode('utf-8', errors='ignore')
@@ -65,7 +59,7 @@ def process_pyshark_packet(packet, packet_count, tracker_state):
         print(f"{Fore.CYAN}  PYSHARK PACKET INSPECTOR — CAPTURED FRAME #{packet_count}")
         print(f"{Style.BRIGHT}{Fore.CYAN}{'='*75}")
 
-        # Basic Protocol Metadata
+        
         src_ip = packet.ip.src if hasattr(packet, 'ip') else "127.0.0.1"
         dst_ip = packet.ip.dst if hasattr(packet, 'ip') else "127.0.0.1"
         frame_type = frame.get('TYPE', 'UNKNOWN')
@@ -79,13 +73,13 @@ def process_pyshark_packet(packet, packet_count, tracker_state):
         print(f"{Fore.WHITE}Data Link Layer: Node ID = {node_id} | Frame Type = {frame_type}")
         print(f"{Fore.YELLOW}{'-'*75}")
 
-        # 1. Multiple Access Control (Slotted ALOHA Inspection)
-        if node_id == '99': # Node 2 Collision frame
+        
+        if node_id == '99': 
             print(f"{Fore.RED}[MAC - SLOTTED ALOHA] Contending Transmission Detected from Secondary Node B (Collision Source)")
         else:
             print(f"{Fore.GREEN}[MAC - SLOTTED ALOHA] Frame Transmitted in Synchronized Slot Boundary by Primary Node {node_id}")
 
-        # 2. Selective Repeat ARQ (Flow Control & Seq Numbers)
+        # Selective Repeat ARQ (Flow Control & Seq Numbers)
         if frame_type == 'DATA':
             print(f"{Fore.MAGENTA}[FLOW CONTROL - SR] DATA Frame Received | Seq No: {seq_num} | Length: {payload_len} bytes")
             if tracker_state['last_expected_seq'] is not None:
@@ -100,7 +94,7 @@ def process_pyshark_packet(packet, packet_count, tracker_state):
             print(f"{Fore.GREEN}[FLOW CONTROL - SR] ACK Frame Received | Selective ACK No: {seq_num}")
             print(f"{Fore.GREEN}[FLOW CONTROL - SR] Sender Buffer for Frame {seq_num} cleared. Sliding Sender Window.")
 
-        # 3. Hamming Code Error Handling Inspection
+        # Hamming Code Error Handling Inspection
         print(f"{Fore.YELLOW}{'-'*75}")
         print(f"{Fore.BLUE}[ERROR CONTROL - HAMMING(7,4)] Encoded Payload Stream:")
         print(f"   Hex & Binary Breakdown: {inspect_hamming_bits(raw_hamming)}")
@@ -117,7 +111,6 @@ def start_live_capture(interface_name=None):
     Starts PyShark Live Capture on the local loopback interface.
     """
     if interface_name is None:
-        # Determine loopback interface name based on OS
         if platform.system() == "Windows":
             interface_name = r"\Device\NPF_Loopback"
         else:
@@ -170,9 +163,7 @@ def analyze_pcap_file(pcap_path):
 
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1].endswith(".pcap"):
-        # Run PCAP file analysis if a .pcap argument is supplied
         analyze_pcap_file(sys.argv[1])
     else:
-        # Default to Live Loopback Capture
         custom_iface = sys.argv[1] if len(sys.argv) > 1 else None
         start_live_capture(custom_iface)

@@ -57,8 +57,6 @@ public:
             // Correct the bit by flipping position (7 - syndrome)
             codeword ^= (1 << (7 - syndrome));
         }
-
-        // Extract clean data bits [D1, D2, D3, D4]
         uint8_t d1 = (codeword >> 4) & 0x01;
         uint8_t d2 = (codeword >> 2) & 0x01;
         uint8_t d3 = (codeword >> 1) & 0x01;
@@ -79,7 +77,6 @@ public:
         return encoded;
     }
 
-    // Decodes Hamming codeword buffer and performs bit error correction
     static std::vector<uint8_t> decodeBuffer(const std::vector<uint8_t>& encoded, int& total_errors_corrected) {
         std::vector<uint8_t> decoded;
         total_errors_corrected = 0;

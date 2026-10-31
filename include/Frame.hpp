@@ -5,7 +5,7 @@
 #include <vector>
 #include <cstdint>
 #include <sstream>
-
+using namespace std;
 enum FrameType : uint8_t {
     FRAME_DATA = 0,
     FRAME_ACK  = 1,
@@ -18,11 +18,10 @@ struct Frame {
     uint8_t seq_num;         // Sequence Number
     uint8_t ack_num;         // ACK / Piggybacked ACK Number
     uint8_t payload_len;     // Payload byte length
-    std::vector<uint8_t> encoded_payload; // Hamming Encoded Payload Data
+    vector<uint8_t> encoded_payload; // Hamming Encoded Payload Data
 
-    // Formats the frame into a text line for UDP transport to PyShark
-    std::string serialize() const {
-        std::stringstream ss;
+    string serialize() const {
+        stringstream ss;
         ss << "NODE:" << (int)node_id 
            << "|TYPE:" << (type == FRAME_DATA ? "DATA" : (type == FRAME_ACK ? "ACK" : "NAK"))
            << "|SEQ:" << (int)seq_num 
@@ -31,7 +30,7 @@ struct Frame {
            << "|PAYLOAD_HAMMING:";
         
         for (uint8_t byte : encoded_payload) {
-            ss << std::hex << (int)byte << " ";
+            ss << hex << (int)byte << " ";
         }
         return ss.str();
     }

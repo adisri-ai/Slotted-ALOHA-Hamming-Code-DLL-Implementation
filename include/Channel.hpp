@@ -48,8 +48,6 @@ public:
         sendto(udp_sock, serialized.c_str(), serialized.length(), 0, 
                (struct sockaddr*)&pyshark_addr, sizeof(pyshark_addr));
     }
-
-    // Simulates channel noise by flipping 1 bit in the Hamming payload
     void injectNoiseBit(Frame& frame, int byte_index, int bit_index) {
         if (byte_index < static_cast<int>(frame.encoded_payload.size())) {
             frame.encoded_payload[byte_index] ^= (1 << (7 - bit_index));

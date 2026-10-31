@@ -9,7 +9,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-# Configure Page
+
 st.set_page_config(
     page_title="Data Link Layer Client-Server Simulation",
     page_icon="📡",
@@ -17,7 +17,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# File Paths for Restructured Layout
 SERVER_CPP = os.path.join("src", "server.cpp")
 CLIENT_CPP = os.path.join("src", "client.cpp")
 BUILD_DIR = "build"
@@ -25,7 +24,6 @@ BUILD_DIR = "build"
 SERVER_EXE = os.path.join(BUILD_DIR, "server.exe") if platform.system() == "Windows" else f"./{BUILD_DIR}/server"
 CLIENT_EXE = os.path.join(BUILD_DIR, "client.exe") if platform.system() == "Windows" else f"./{BUILD_DIR}/client"
 
-# Session State Variables
 if "sim_logs" not in st.session_state:
     st.session_state["sim_logs"] = ""
 if "sim_metrics" not in st.session_state:
@@ -33,10 +31,6 @@ if "sim_metrics" not in st.session_state:
 if "sim_completed" not in st.session_state:
     st.session_state["sim_completed"] = False
 
-
-# ============================================================================
-# 1. HELPER FUNCTIONS: COMPILATION & PARSING
-# ============================================================================
 
 def compile_client_server():
     os.makedirs(BUILD_DIR, exist_ok=True)
@@ -129,11 +123,6 @@ def parse_simulation_output(raw_logs):
 
     return stats
 
-
-# ============================================================================
-# 2. UI LAYOUT & CONTROLS
-# ============================================================================
-
 st.title("📡 Data Link Layer Interactive Client-Server Simulator")
 st.markdown("""
 **Architecture**: Central Receiver Server (`src/server.cpp`) listening on UDP `8000` + Contending Clients (`src/client.cpp`) communicating over BSD Sockets.  
@@ -152,7 +141,6 @@ if st.sidebar.button("🧹 Clear Results", use_container_width=True):
 log_container = st.expander("📄 Real-Time Server & Channel Logs", expanded=True)
 log_box = log_container.empty()
 
-# Execute Simulation when button clicked
 if sim_btn:
     st.session_state["sim_logs"] = ""
     st.session_state["sim_completed"] = False
@@ -169,11 +157,9 @@ if sim_btn:
     cli1_cmd = [CLIENT_EXE, "1"] if platform.system() == "Windows" else ["stdbuf", "-oL", CLIENT_EXE, "1"]
     cli2_cmd = [CLIENT_EXE, "2"] if platform.system() == "Windows" else ["stdbuf", "-oL", CLIENT_EXE, "2"]
 
-    # 1. Launch Server Process
     srv_proc = subprocess.Popen(srv_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
     time.sleep(0.1)
 
-    # 2. Launch Client Node 1 and Client Node 2 Concurrently
     cli1_proc = subprocess.Popen(cli1_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     cli2_proc = subprocess.Popen(cli2_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 
@@ -194,14 +180,10 @@ if sim_btn:
     st.session_state["sim_metrics"] = parse_simulation_output(accumulated)
     st.session_state["sim_completed"] = True
 
-# Persist logs on UI
 if st.session_state["sim_logs"]:
     log_box.code(st.session_state["sim_logs"], language="text")
 
 
-# ============================================================================
-# 3. INTERACTIVE VISUAL ANALYTICS DASHBOARD
-# ============================================================================
 
 if st.session_state["sim_completed"] and st.session_state["sim_metrics"]:
     metrics = st.session_state["sim_metrics"]
@@ -209,11 +191,11 @@ if st.session_state["sim_completed"] and st.session_state["sim_metrics"]:
     st.header("🎯 Feature Visual Analytics & Protocol Diagnostics")
 
     f_tab1, f_tab2, f_tab3, f_tab4, f_tab5 = st.tabs([
-        "🚀 1. Movement of Packets",
-        "📦 2. In-Order Delivery",
-        "🛡️ 3. Error Handling (Hamming)",
-        "🔄 4. Flow Control (SR)",
-        "⚡ 5. Multiple Access (ALOHA)"
+        "1. Movement of Packets",
+        "2. In-Order Delivery",
+        "3. Error Handling (Hamming)",
+        "4. Flow Control (SR)",
+        "5. Multiple Access (ALOHA)"
     ])
 
     with f_tab1:
@@ -294,4 +276,4 @@ if st.session_state["sim_completed"] and st.session_state["sim_metrics"]:
             st.plotly_chart(fig5, use_container_width=True)
 
 elif not st.session_state["sim_completed"]:
-    st.info("👈 Click **'Run Client-Server Network'** in the sidebar to start the C++ processes and view analytics.")
+    st.info("Click **'Run Client-Server Network'** in the sidebar to start the C++ processes and view analytics.")
