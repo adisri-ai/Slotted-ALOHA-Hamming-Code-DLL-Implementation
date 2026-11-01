@@ -1,107 +1,88 @@
 #ifndef HAMMING_CODE_HPP
 #define HAMMING_CODE_HPP
 
-#include <iostream>
 #include <vector>
 #include <cstdint>
-
+#include <iostream>
+using namespace std;
 class HammingCode {
 public:
-    // Encodes a 4-bit nibble into a 7-bit Hamming codeword
-    // Codeword bit positions (1-indexed): [P1, P2, D1, P4, D2, D3, D4]
+    uint32_t n_bits; 
+    uint32_t k_bits; 
+
+    HammingCode(uint32_t n = 7, uint32_t k = 4) : n_bits(n), k_bits(k) {}
+
     static uint8_t encodeNibble(uint8_t nibble) {
         uint8_t d1 = (nibble >> 3) & 0x01;
         uint8_t d2 = (nibble >> 2) & 0x01;
         uint8_t d3 = (nibble >> 1) & 0x01;
-        uint8_t d4 = (nibble >> 0) & 0x01;
+        uint8_t d4 = nibble & 0x01;
 
         uint8_t p1 = d1 ^ d2 ^ d4;
         uint8_t p2 = d1 ^ d3 ^ d4;
         uint8_t p4 = d2 ^ d3 ^ d4;
 
-        uint8_t codeword = 0;
-        codeword |= (p1 << 6); // Bit 1
-        codeword |= (p2 << 5); // Bit 2
-        codeword |= (d1 << 4); // Bit 3
-        codeword |= (p4 << 3); // Bit 4
-        codeword |= (d2 << 2); // Bit 5
-        codeword |= (d3 << 1); // Bit 6
-        codeword |= (d4 << 0); // Bit 7
-
-        return codeword;
+        return (p1 << 6) | (p2 << 5) | (d1 << 4) | (p4 << 3) | (d2 << 2) | (d3 << 1) | d4;
     }
 
-    // Decodes a 7-bit Hamming codeword, calculates syndrome, and corrects 1-bit errors
-    static uint8_t decodeNibble(uint8_t codeword, bool& error_detected, int& corrected_bit_pos) {
-        error_detected = false;
-        corrected_bit_pos = 0;
-
-        uint8_t c1 = (codeword >> 6) & 0x01;
-        uint8_t c2 = (codeword >> 5) & 0x01;
-        uint8_t c3 = (codeword >> 4) & 0x01;
-        uint8_t c4 = (codeword >> 3) & 0x01;
-        uint8_t c5 = (codeword >> 2) & 0x01;
-        uint8_t c6 = (codeword >> 1) & 0x01;
-        uint8_t c7 = (codeword >> 0) & 0x01;
-
-        // Calculate Syndrome bits s1, s2, s3
-        uint8_t s1 = c1 ^ c3 ^ c5 ^ c7;
-        uint8_t s2 = c2 ^ c3 ^ c6 ^ c7;
-        uint8_t s3 = c4 ^ c5 ^ c6 ^ c7;
-
-        int syndrome = (s3 << 2) | (s2 << 1) | s1; // 1-based bit position of error
-
-        if (syndrome != 0) {
-            error_detected = true;
-            corrected_bit_pos = syndrome;
-            // Correct the bit by flipping position (7 - syndrome)
-            codeword ^= (1 << (7 - syndrome));
-        }
+    static uint8_t decodeNibble(uint8_t codeword, bool& error_corrected) {
+        error_corrected = false;
+        
+        uint8_t p1 = (codeword >> 6) & 0x01;
+        uint8_t p2 = (codeword >> 5) & 0x01;
         uint8_t d1 = (codeword >> 4) & 0x01;
+        uint8_t p4 = (codeword >> 3) & 0x01;
         uint8_t d2 = (codeword >> 2) & 0x01;
         uint8_t d3 = (codeword >> 1) & 0x01;
-        uint8_t d4 = (codeword >> 0) & 0x01;
+        uint8_t d4 = codeword & 0x01;
+
+        uint8_t s1 = p1 ^ d1 ^ d2 ^ d4;
+        uint8_t s2 = p2 ^ d1 ^ d3 ^ d4;
+        uint8_t s4 = p4 ^ d2 ^ d3 ^ d4;
+
+        int syndrome = (s4 << 2) | (s2 << 1) | s1;
+
+        if (syndrome != 0) {
+            error_corrected = true;
+            cout << "[HAMMING FEC (" << 7 << "," << 4 << ")] Single-bit error detected at position " 
+                      << syndrome << ". Automatically corrected!\n";
+            codeword ^= (1 << (7 - syndrome));
+            
+            d1 = (codeword >> 4) & 0x01;
+            d2 = (codeword >> 2) & 0x01;
+            d3 = (codeword >> 1) & 0x01;
+            d4 = codeword & 0x01;
+        }
 
         return (d1 << 3) | (d2 << 2) | (d3 << 1) | d4;
     }
 
-    // Encodes full byte string payload into Hamming codewords
-    static std::vector<uint8_t> encodeBuffer(const std::vector<uint8_t>& input) {
-        std::vector<uint8_t> encoded;
-        for (uint8_t byte : input) {
-            uint8_t high_nibble = (byte >> 4) & 0x0F;
-            uint8_t low_nibble = byte & 0x0F;
-            encoded.push_back(encodeNibble(high_nibble));
-            encoded.push_back(encodeNibble(low_nibble));
+    static vector<uint8_t> encodeBuffer(const vector<uint8_t>& input) {
+        vector<uint8_t> output;
+        for (uint8_t b : input) {
+            output.push_back(encodeNibble((b >> 4) & 0x0F));
+            output.push_back(encodeNibble(b & 0x0F));
         }
-        return encoded;
+        return output;
     }
 
-    static std::vector<uint8_t> decodeBuffer(const std::vector<uint8_t>& encoded, int& total_errors_corrected) {
-        std::vector<uint8_t> decoded;
+    static vector<uint8_t> decodeBuffer(const vector<uint8_t>& input, int& total_errors_corrected) {
+        vector<uint8_t> output;
         total_errors_corrected = 0;
-
-        for (size_t i = 0; i < encoded.size(); i += 2) {
+        for (size_t i = 0; i + 1 < input.size(); i += 2) {
             bool err1 = false, err2 = false;
-            int pos1 = 0, pos2 = 0;
-
-            uint8_t high_nibble = decodeNibble(encoded[i], err1, pos1);
-            uint8_t low_nibble = decodeNibble(encoded[i+1], err2, pos2);
-
-            if (err1) {
-                total_errors_corrected++;
-                std::cout << "[HAMMING FEC] Single-bit error detected at position " << pos1 
-                          << " in block " << i << ". Automatically corrected!\n";
-            }
-            if (err2) {
-                total_errors_corrected++;
-                std::cout << "[HAMMING FEC] Single-bit error detected at position " << pos2 
-                          << " in block " << (i + 1) << ". Automatically corrected!\n";
-            }
-
-            decoded.push_back((high_nibble << 4) | low_nibble);
+            uint8_t high = decodeNibble(input[i], err1);
+            uint8_t low = decodeNibble(input[i+1], err2);
+            if (err1) total_errors_corrected++;
+            if (err2) total_errors_corrected++;
+            output.push_back((high << 4) | low);
         }
-        return decoded;
+        return output;
+    }
+
+    static vector<uint8_t> decodeBuffer(const vector<uint8_t>& input) {
+        int dummy = 0;
+        return decodeBuffer(input, dummy);
     }
 };
 

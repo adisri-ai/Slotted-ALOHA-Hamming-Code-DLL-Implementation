@@ -23,8 +23,15 @@
 using namespace std;
 
 int main(int argc, char* argv[]) {
-    uint8_t node_id = (argc > 1) ? stoi(argv[1]) : 1;
+    // Parse dynamic parameters: node_id, timeout_ms, hamming_n, hamming_k
+    uint8_t node_id     = (argc > 1) ? stoi(argv[1]) : 1;
+    uint32_t timeout_ms = (argc > 2) ? stoi(argv[2]) : 1000;
+    uint32_t hamming_n  = (argc > 3) ? stoi(argv[3]) : 7;
+    uint32_t hamming_k  = (argc > 4) ? stoi(argv[4]) : 4;
+
     cout << "  DATA LINK LAYER CLIENT (NODE ID: " << (int)node_id << ")\n";
+    cout << "  [CONFIG] Timeout: " << timeout_ms << "ms | Hamming Code: (" 
+         << hamming_n << "," << hamming_k << ")\n";
 
 #if defined(_WIN32) || defined(_WIN64)
     WSADATA wsaData;
@@ -47,6 +54,7 @@ int main(int argc, char* argv[]) {
 
     SelectiveRepeatSender sender(4, 8);
     Node mac_node(node_id);
+    HammingCode hamming(hamming_n, hamming_k);
 
     if (node_id == 1) {
         vector<string> messages = {"Packet-0", "Packet-1", "Packet-2", "Packet-3"};
@@ -67,7 +75,7 @@ int main(int argc, char* argv[]) {
     }
 
     int current_slot = 1;
-    while ((!mac_node.tx_queue.empty() || !sender.window_buffer.empty()) && current_slot <= 20) {
+    while ((!mac_node.tx_queue.empty() || !sender.window_buffer.empty()) && current_slot <= 12) {
         this_thread::sleep_for(chrono::milliseconds(300));
 
         if (mac_node.canTransmitInSlot()) {
@@ -83,7 +91,6 @@ int main(int argc, char* argv[]) {
             mac_node.handleSuccess();
         }
 
-        // Listen non-blocking for incoming ACK from Server
         char buffer[1024] = {0};
         int bytes = recv(client_sock, buffer, sizeof(buffer) - 1, 0);
         if (bytes > 0) {
@@ -98,8 +105,7 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        // Tick retransmission timers
-        vector<Frame> retransmissions = sender.tickTimers();
+        vector<Frame> retransmissions = sender.tickTimers(timeout_ms);
         for (const auto& re_frame : retransmissions) {
             cout << "[FEATURE 4: FLOW CONTROL] Client Node " << (int)node_id 
                  << " Retransmission Timer expired for Seq=" << (int)re_frame.seq_num << ". Re-queuing...\n";

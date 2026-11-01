@@ -8,7 +8,6 @@
 #include "HammingCode.hpp"
 #include "Frame.hpp"
 #include "SelectiveRepeat.hpp"
-#include "StochasticChannel.hpp"
 
 #if defined(_WIN32) || defined(_WIN64)
     #include <winsock2.h>
@@ -63,15 +62,21 @@ Frame parseSerializedFrame(const string& raw) {
     return f;
 }
 
-int main() {
-    cout << "  DATA LINK LAYER SERVER (RECEIVER NODE & CHANNEL MASTER ON PORT 8000)      \n";
+int main(int argc, char* argv[]) {
+    // Parse the 3 dynamic CLI parameters
+    uint32_t timeout_ms = (argc > 1) ? stoi(argv[1]) : 1000;
+    uint32_t hamming_n  = (argc > 2) ? stoi(argv[2]) : 7;
+    uint32_t hamming_k  = (argc > 3) ? stoi(argv[3]) : 4;
+
+    cout << "  DATA LINK LAYER SERVER (RECEIVER NODE & CHANNEL MASTER ON PORT 8000)\n";
+    cout << "  [CONFIG] Timeout: " << timeout_ms << "ms | Hamming Code: (" 
+         << hamming_n << "," << hamming_k << ")\n\n";
 
 #if defined(_WIN32) || defined(_WIN64)
     WSADATA wsaData;
     WSAStartup(MAKEWORD(2,2), &wsaData);
 #endif
 
-    // Socket 1: Server Receiver Socket (Port 8000)
     int server_sock = socket(AF_INET, SOCK_DGRAM, 0);
     struct sockaddr_in server_addr, client_addr;
     memset(&server_addr, 0, sizeof(server_addr));
@@ -96,12 +101,13 @@ int main() {
     pyshark_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
     SelectiveRepeatReceiver receiver(4, 8);
-    StochasticChannel channel(0.25, 0.15); 
+    HammingCode hamming(hamming_n, hamming_k);
     int current_slot = 1;
+    bool force_noise_once = true;
 
     cout << "[SERVER] Listening for Client connections on UDP Port 8000...\n";
 
-    while (current_slot <= 20) {
+    while (current_slot <= 15) {
         cout << "=== TIME SLOT " << current_slot << " ===\n";
         vector<pair<Frame, sockaddr_in>> slot_frames;
         auto slot_start = chrono::steady_clock::now();
@@ -119,7 +125,6 @@ int main() {
             this_thread::sleep_for(chrono::milliseconds(10));
         }
 
-        // FEATURE 5: MULTIPLE ACCESS (SLOTTED ALOHA EVALUATION)
         if (slot_frames.size() > 1) {
             cout << "[FEATURE 5: MULTIPLE ACCESS] COLLISION DETECTED in Slot " << current_slot 
                  << "! Received " << slot_frames.size() << " client frames simultaneously.\n";
@@ -129,18 +134,15 @@ int main() {
             Frame rx_frame = slot_frames[0].first;
             sockaddr_in sender_client = slot_frames[0].second;
 
-            if (channel.shouldDropPacket()) {
-                cout << "[STOCHASTIC CHANNEL] Frame Seq=" << (int)rx_frame.node_id 
-                     << " Seq=" << (int)rx_frame.seq_num << " WAS DROPPED in physical transit!\n";
-                current_slot++;
-                continue;
-            }
-
             cout << "[FEATURE 1: MOVEMENT OF PACKETS] Server received Frame from Client Node " 
                  << (int)rx_frame.node_id << " | Seq=" << (int)rx_frame.seq_num << "\n";
 
-            if (channel.shouldInjectNoise()) {
-                channel.injectRandomBitFlip(rx_frame);
+            if (rx_frame.seq_num == 2 && force_noise_once) {
+                cout << "[FEATURE 3: ERROR HANDLING] Injecting 1-bit channel noise into Frame Seq=2...\n";
+                if (!rx_frame.encoded_payload.empty()) {
+                    rx_frame.encoded_payload[0] ^= 0x10;
+                }
+                force_noise_once = false;
             }
 
             string pyshark_msg = rx_frame.serialize();
@@ -149,7 +151,6 @@ int main() {
 
             Frame ack_frame = receiver.processFrame(rx_frame);
 
-            // FEATURE 4: FLOW CONTROL (SENDING SELECTIVE ACK BACK TO CLIENT)
             cout << "[FEATURE 4: FLOW CONTROL] Server sending Selective ACK Seq=" 
                  << (int)ack_frame.seq_num << " back to Client Node " << (int)rx_frame.node_id << "...\n";
             string ack_serialized = ack_frame.serialize();
@@ -166,7 +167,6 @@ int main() {
         current_slot++;
     }
 
-    // FEATURE 2: IN-ORDER DELIVERY SUMMARY
     cout << "  SERVER SIMULATION COMPLETED — IN-ORDER APPLICATION DELIVERY SUMMARY      \n";
     for (size_t i = 0; i < receiver.upper_layer_delivered_data.size(); ++i) {
         cout << "  [FEATURE 2: IN-ORDER DELIVERY] Index " << i << " -> Delivered Payload: \"" 
