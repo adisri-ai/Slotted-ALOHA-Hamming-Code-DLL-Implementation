@@ -102,7 +102,7 @@ def parse_simulation_output(raw_logs):
             if seq_m:
                 stats["arrival_records"].append({"Arrival_Index": len(stats["arrival_records"]) + 1, "Seq": int(seq_m.group(1)), "Status": "Out-of-Order Buffered"})
         elif "In-Order Delivery" in line or "Processing Frame" in line:
-            seq_m = re.search(r"Seq=(\d+)", line)
+            seq_m = re.search(r"(?:Seq=|Packet-)(\d+)", line)
             if seq_m:
                 stats["arrival_records"].append({"Arrival_Index": len(stats["arrival_records"]) + 1, "Seq": int(seq_m.group(1)), "Status": "In-Order Processed"})
 
@@ -128,7 +128,6 @@ def parse_simulation_output(raw_logs):
     return stats
 
 
-# Sidebar Controls (3 Dynamic CLI Parameters)
 st.sidebar.header("⚙️ Dynamic Parameters")
 timeout_ms = st.sidebar.number_input("1. Retransmission Timeout (ms)", min_value=200, max_value=5000, value=1000, step=100)
 hamming_n = st.sidebar.number_input("2. Hamming Codeword Length (n)", min_value=7, max_value=31, value=7, step=1)
